@@ -122,7 +122,7 @@ public class FloatingService extends Service {
                                 S.setPos(FloatingService.this, lp.x, lp.y);
                             }
                         } else if (e.getAction() == MotionEvent.ACTION_UP) {
-                            ResetService.request(FloatingService.this);
+                            ResetService.request(FloatingService.this, false);
                         }
                         return true;
                 }
@@ -130,6 +130,11 @@ public class FloatingService extends Service {
             }
         });
         wm.addView(fab, lp);
+        ResetService.listener = new ResetService.Listener() {
+            public void busy(boolean b) {
+                if (fab != null) fab.setSpin(b);
+            }
+        };
     }
 
     void showClose() {
@@ -166,6 +171,7 @@ public class FloatingService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        ResetService.listener = null;
         hideClose();
         if (fab != null) {
             try {

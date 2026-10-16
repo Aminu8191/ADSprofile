@@ -113,7 +113,7 @@ public class MainActivity extends Activity {
         TextView rt = Ui.tv(this, tr("Reset Ads ID now", "Reset Ads ID yanzu"), 19, Ui.GOLD, true);
         rt.setPadding(dp(10), 0, 0, 0);
         reset.addView(rt);
-        reset.setOnClickListener(v -> ResetService.request(this));
+        reset.setOnClickListener(v -> ResetService.request(this, true));
         LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, dp(64));
         rp.setMargins(0, dp(8), 0, dp(8));
         page.addView(reset, rp);
