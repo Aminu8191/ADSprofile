@@ -51,8 +51,19 @@ class Ui {
         return t;
     }
 
+    // Gold when selected, outlined when not.
+    static void styleHalf(Context c, Button b, boolean selected) {
+        if (selected) {
+            b.setBackground(ripple(c, gold(c, 24), 24));
+            b.setTextColor(DARK);
+        } else {
+            b.setBackground(ripple(c, shape(c, 0x1AFFFFFF, GOLD, 24), 24));
+            b.setTextColor(GOLD);
+        }
+    }
+
     // One half of the Personal / Work row.
-    static Button half(Context c, String text, boolean filled, boolean left) {
+    static Button half(Context c, String text, boolean selected, boolean left) {
         Button b = new Button(c);
         b.setText(text);
         b.setAllCaps(false);
@@ -60,13 +71,7 @@ class Ui {
         b.setTypeface(Typeface.DEFAULT_BOLD);
         b.setStateListAnimator(null);
         b.setPadding(0, 0, 0, 0);
-        if (filled) {
-            b.setBackground(ripple(c, gold(c, 24), 24));
-            b.setTextColor(DARK);
-        } else {
-            b.setBackground(ripple(c, shape(c, 0x1AFFFFFF, GOLD, 24), 24));
-            b.setTextColor(GOLD);
-        }
+        styleHalf(c, b, selected);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(c, 64), 1f);
         lp.setMargins(left ? 0 : dp(c, 6), dp(c, 8), left ? dp(c, 6) : 0, dp(c, 8));
         b.setLayoutParams(lp);

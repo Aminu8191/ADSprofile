@@ -32,6 +32,8 @@ public class MainActivity extends Activity {
     Switch sw;
     boolean building = true;
     boolean shownHa;
+    boolean selWork;
+    Button personalBtn, workBtn;
 
     String tr(String en, String ha) {
         return S.t(this, en, ha);
@@ -87,20 +89,21 @@ public class MainActivity extends Activity {
         TextView t = Ui.tv(this, "ADS profile", 32, 0xFFFFFFFF, true);
         t.setGravity(Gravity.CENTER);
         page.addView(t);
-        TextView s = Ui.tv(this, tr("Choose your profile", "Zabi profile dinka"), 15, Ui.MINT, false);
+        TextView s = Ui.tv(this, tr("Choose the profile to reset", "Za\u0253i profile da za a yi reset"), 15, Ui.MINT, false);
         s.setGravity(Gravity.CENTER);
         s.setPadding(0, dp(4), 0, dp(20));
         page.addView(s);
 
-        // Personal and Work: one row, two halves
+        // Personal and Work: pick which profile gets reset (the gold one is selected)
+        selWork = S.selWork(this, S.isManaged(this));
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        Button personal = Ui.half(this, "Personal", true, true);
-        personal.setOnClickListener(v -> Ads.open(this));
-        Button work = Ui.half(this, "Work", false, false);
-        work.setOnClickListener(v -> openWork());
-        row.addView(personal);
-        row.addView(work);
+        personalBtn = Ui.half(this, "Personal", !selWork, true);
+        personalBtn.setOnClickListener(v -> select(false));
+        workBtn = Ui.half(this, "Work", selWork, false);
+        workBtn.setOnClickListener(v -> select(true));
+        row.addView(personalBtn);
+        row.addView(workBtn);
         page.addView(row, new LinearLayout.LayoutParams(-1, -2));
 
         // Reset Ads ID now
@@ -113,7 +116,7 @@ public class MainActivity extends Activity {
         TextView rt = Ui.tv(this, tr("Reset Ads ID now", "Reset Ads ID yanzu"), 19, Ui.GOLD, true);
         rt.setPadding(dp(10), 0, 0, 0);
         reset.addView(rt);
-        reset.setOnClickListener(v -> ResetService.request(this, true));
+        reset.setOnClickListener(v -> Reset.go(this, false));
         LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, dp(64));
         rp.setMargins(0, dp(8), 0, dp(8));
         page.addView(reset, rp);
@@ -128,8 +131,8 @@ public class MainActivity extends Activity {
         LinearLayout txt = new LinearLayout(this);
         txt.setOrientation(LinearLayout.VERTICAL);
         txt.addView(Ui.tv(this, tr("Floating button", "Ma\u0253allin shawagi"), 17, 0xFFFFFFFF, true));
-        TextView hint = Ui.tv(this, tr("Tap once to reset. Drag it to the X to remove it.",
-                "Danna sau \u0257aya don reset. Ja shi zuwa X don cire shi."), 12, Ui.MINT, false);
+        TextView hint = Ui.tv(this, tr("Tap once to reset the selected profile. Drag it to the X to remove it.",
+                "Danna sau \u0257aya don reset \u0257in profile da aka za\u0253a. Ja shi zuwa X don cire shi."), 12, Ui.MINT, false);
         hint.setPadding(0, dp(2), 0, 0);
         txt.addView(hint);
         fr.addView(txt, new LinearLayout.LayoutParams(0, -2, 1f));
@@ -169,17 +172,11 @@ public class MainActivity extends Activity {
         building = false;
     }
 
-    void openWork() {
-        if (Build.VERSION.SDK_INT >= 28) {
-            CrossProfileApps cpa = getSystemService(CrossProfileApps.class);
-            List<UserHandle> l = cpa.getTargetUserProfiles();
-            if (!l.isEmpty()) {
-                cpa.startMainActivity(new ComponentName(this, SplashActivity.class), l.get(0));
-                return;
-            }
-        }
-        Toast.makeText(this, tr("No work profile found, or the app is not installed in it.",
-                "Ba a sami Work profile ba, ko kuwa ba a shigar da app a cikinsa ba."), Toast.LENGTH_LONG).show();
+    void select(boolean work) {
+        selWork = work;
+        S.setSelWork(this, work);
+        Ui.styleHalf(this, personalBtn, !work);
+        Ui.styleHalf(this, workBtn, work);
     }
 
     void enableFloat() {

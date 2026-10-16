@@ -42,10 +42,11 @@ public class SplashActivity extends Activity {
     @Override
     public void onCreate(Bundle b) {
         super.onCreate(b);
-        // The Work button of the main copy starts this copy inside the work profile: go straight to Ads.
-        if (isManaged() && launchedFromSelf()) {
-            Ads.open(this);
+        // The other copy (main or work) asked this copy to reset the Ads ID of this profile.
+        if (launchedFromSelf()) {
+            ResetService.request(this, ResetService.MODE_GREEN);
             finish();
+            overridePendingTransition(0, 0);
             return;
         }
         getWindow().setStatusBarColor(0xFF02200F);

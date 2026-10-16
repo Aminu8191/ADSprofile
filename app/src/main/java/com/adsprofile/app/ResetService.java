@@ -1,13 +1,17 @@
 package com.adsprofile.app;
 
 import android.accessibilityservice.AccessibilityService;
+import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Display;
 import android.view.Gravity;
+import android.view.View;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -19,6 +23,9 @@ import java.util.List;
 // From the app button a curtain covers the Ads page; from the floating button the button itself spins.
 // The Advertising ID is read before and after, so "Reset successful" is only shown when it really changed.
 public class ResetService extends AccessibilityService {
+    static final int MODE_GREEN = 1;    // green curtain with the logo (app button, or the other profile)
+    static final int MODE_FREEZE = 2;   // still picture of your screen + spinning floating button
+
     interface Listener {
         void busy(boolean b);
     }
@@ -32,7 +39,7 @@ public class ResetService extends AccessibilityService {
     int stage;
     long deadline;
     WindowManager wm;
-    CurtainView curtain;
+    View curtain;
 
     @Override
     protected void onServiceConnected() {
@@ -56,14 +63,14 @@ public class ResetService extends AccessibilityService {
     public void onInterrupt() {
     }
 
-    static void request(Context c, boolean withCurtain) {
+    static void request(Context c, int mode) {
         ResetService s = instance;
         if (s == null) {
             Toast.makeText(c, S.t(c, "Turn on Accessibility for ADS profile first.",
                     "Kunna Accessibility na ADS profile tukuna."), Toast.LENGTH_LONG).show();
             return;
         }
-        s.start(withCurtain);
+        s.start(mode);
     }
 
     void setBusy(boolean b) {
@@ -82,12 +89,11 @@ public class ResetService extends AccessibilityService {
         }
     }
 
-    void start(boolean withCurtain) {
+    void start(int mode) {
         if (running) return;
         running = true;
         finishing = false;
         stage = 0;
-        deadline = System.currentTimeMillis() + 9000;
         setBusy(true);
         before = null;
         beforeThread = new Thread(new Runnable() {
@@ -96,9 +102,71 @@ public class ResetService extends AccessibilityService {
             }
         });
         beforeThread.start();
-        if (withCurtain) showCurtain();
+        if (mode == MODE_FREEZE && Build.VERSION.SDK_INT >= 30) {
+            freezeThenGo();
+        } else {
+            showCurtain(null);
+            go();
+        }
+    }
+
+    // open the Ads page and start tapping
+    void go() {
+        deadline = System.currentTimeMillis() + 9000;
         Ads.open(this);
         h.postDelayed(step, 450);
+    }
+
+    // Take a picture of the current screen first, cover the screen with it, then open the Ads page.
+    // If the picture cannot be taken (older Android, or a protected app), the green curtain is used.
+    @TargetApi(30)
+    void freezeThenGo() {
+        final boolean[] handled = {false};
+        final Runnable fallback = new Runnable() {
+            public void run() {
+                if (handled[0]) return;
+                handled[0] = true;
+                showCurtain(null);
+                go();
+            }
+        };
+        h.postDelayed(fallback, 900);
+        try {
+            takeScreenshot(Display.DEFAULT_DISPLAY, getMainExecutor(), new TakeScreenshotCallback() {
+                @Override
+                public void onSuccess(ScreenshotResult r) {
+                    Bitmap sw = null;
+                    try {
+                        Bitmap hw = Bitmap.wrapHardwareBuffer(r.getHardwareBuffer(), r.getColorSpace());
+                        if (hw != null) {
+                            sw = hw.copy(Bitmap.Config.ARGB_8888, false);
+                            hw.recycle();
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    try {
+                        r.getHardwareBuffer().close();
+                    } catch (Exception ignored) {
+                    }
+                    if (handled[0]) return;
+                    handled[0] = true;
+                    h.removeCallbacks(fallback);
+                    showCurtain(sw);
+                    h.postDelayed(new Runnable() {
+                        public void run() {
+                            go();
+                        }
+                    }, sw != null ? 80 : 0);
+                }
+
+                @Override
+                public void onFailure(int code) {
+                    fallback.run();
+                }
+            });
+        } catch (Exception e) {
+            fallback.run();
+        }
     }
 
     final Runnable step = new Runnable() {
@@ -113,7 +181,7 @@ public class ResetService extends AccessibilityService {
         }
     };
 
-    void showCurtain() {
+    void showCurtain(Bitmap shot) {
         if (curtain != null) return;
         try {
             wm = (WindowManager) getSystemService(WINDOW_SERVICE);
@@ -128,10 +196,19 @@ public class ResetService extends AccessibilityService {
             if (Build.VERSION.SDK_INT >= 28) {
                 lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
             }
-            CurtainView c = new CurtainView(this);
-            c.setAlpha(0f);
-            wm.addView(c, lp);
-            c.animate().alpha(1f).setDuration(90).start();
+            View c;
+            if (shot != null) {
+                FloatingService f = FloatingService.inst;
+                boolean showFab = f != null && f.fab != null && f.lp != null;
+                c = new FreezeView(this, shot, showFab ? f.lp.x : 0, showFab ? f.lp.y : 0,
+                        showFab ? f.lp.width : 0, showFab ? f.fab.fill : 0, showFab);
+                wm.addView(c, lp);   // appears at once: it looks exactly like your screen
+            } else {
+                c = new CurtainView(this);
+                c.setAlpha(0f);
+                wm.addView(c, lp);
+                c.animate().alpha(1f).setDuration(90).start();
+            }
             curtain = c;
         } catch (Exception e) {
             curtain = null;   // no curtain, the reset still works
@@ -140,7 +217,7 @@ public class ResetService extends AccessibilityService {
 
     // fade out, then remove
     void hideCurtain() {
-        final CurtainView c = curtain;
+        final View c = curtain;
         if (c == null) return;
         curtain = null;
         c.animate().alpha(0f).setDuration(160).withEndAction(new Runnable() {
@@ -155,7 +232,7 @@ public class ResetService extends AccessibilityService {
 
     // remove at once
     void dropCurtain() {
-        CurtainView c = curtain;
+        View c = curtain;
         curtain = null;
         if (c != null) {
             try {
@@ -232,7 +309,8 @@ public class ResetService extends AccessibilityService {
             return;
         }
         // OK was tapped: ring closes, go back, curtain fades, and the ID is checked
-        if (curtain != null) curtain.setDone();
+        if (curtain instanceof CurtainView) ((CurtainView) curtain).setDone();
+        else if (curtain instanceof FreezeView) ((FreezeView) curtain).setDone();
         h.postDelayed(new Runnable() {
             public void run() {
                 performGlobalAction(GLOBAL_ACTION_BACK);

@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -19,6 +20,8 @@ import android.widget.Toast;
 public class SettingsActivity extends Activity {
     static final String MAIL = "aminulawanzakariyyah@gmail.com";
     static final String TG = "https://t.me/al_ameen_developer";
+
+    TextView accSub;
 
     String tr(String en, String ha) {
         return S.t(this, en, ha);
@@ -66,6 +69,13 @@ public class SettingsActivity extends Activity {
         seg.addView(langBtn("English", false));
         seg.addView(langBtn("Hausa", true));
         page.addView(seg, new LinearLayout.LayoutParams(-1, -2));
+
+        // accessibility: the reset buttons need it
+        page.addView(label(tr("Accessibility", "Accessibility")));
+        page.addView(card(IconView.TOGGLE, tr("Accessibility service", "Accessibility service"), "", v ->
+                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))));
+        accSub = lastSub;
+        refreshAcc();
 
         // contact
         page.addView(label(tr("Contact or Help", "Tuntu\u0253a ko Taimako")));
@@ -121,6 +131,34 @@ public class SettingsActivity extends Activity {
         return v;
     }
 
+    TextView lastSub;
+
+    boolean accOn() {
+        try {
+            String v = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            return v != null && v.contains(getPackageName()) && v.contains("ResetService");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    void refreshAcc() {
+        if (accSub == null) return;
+        if (accOn()) {
+            accSub.setText(tr("On", "A kunne"));
+            accSub.setTextColor(0xFF7DDC9A);
+        } else {
+            accSub.setText(tr("Off. Tap here to turn it on.", "A kashe. Danna nan don kunnawa."));
+            accSub.setTextColor(Ui.GOLD);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        refreshAcc();
+    }
+
     // icon in a gold circle, a title and a line under it
     LinearLayout card(int icon, String title, String sub, View.OnClickListener click) {
         LinearLayout c = new LinearLayout(this);
@@ -143,6 +181,7 @@ public class SettingsActivity extends Activity {
         TextView s = Ui.tv(this, sub, 14, Ui.GOLD, false);
         s.setPadding(0, dp(3), 0, 0);
         col.addView(s);
+        lastSub = s;
         c.addView(col, new LinearLayout.LayoutParams(0, -2, 1f));
         return c;
     }

@@ -20,6 +20,7 @@ import android.view.WindowManager;
 // Draws the draggable floating button over other apps.
 public class FloatingService extends Service {
     static volatile boolean running = false;
+    static volatile FloatingService inst;   // so the reset can copy the button onto its still picture
     WindowManager wm;
     FabView fab;
     CloseView close;
@@ -122,7 +123,7 @@ public class FloatingService extends Service {
                                 S.setPos(FloatingService.this, lp.x, lp.y);
                             }
                         } else if (e.getAction() == MotionEvent.ACTION_UP) {
-                            ResetService.request(FloatingService.this, false);
+                            Reset.go(FloatingService.this, true);
                         }
                         return true;
                 }
@@ -130,6 +131,7 @@ public class FloatingService extends Service {
             }
         });
         wm.addView(fab, lp);
+        inst = this;
         ResetService.listener = new ResetService.Listener() {
             public void busy(boolean b) {
                 if (fab != null) fab.setSpin(b);
@@ -171,6 +173,7 @@ public class FloatingService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        inst = null;
         ResetService.listener = null;
         hideClose();
         if (fab != null) {

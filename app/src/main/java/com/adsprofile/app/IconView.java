@@ -9,7 +9,7 @@ import android.view.View;
 
 // Small icons drawn in code (no image files needed).
 class IconView extends View {
-    static final int GEAR = 0, BACK = 1, MAIL = 2, TELEGRAM = 3, RESET = 4;
+    static final int GEAR = 0, BACK = 1, MAIL = 2, TELEGRAM = 3, RESET = 4, TOGGLE = 5;
     final int type;
     int color;
     final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -102,6 +102,14 @@ class IconView extends View {
                 q.close();
                 p.setStyle(Paint.Style.FILL);
                 cv.drawPath(q, p);
+                break;
+            }
+            case TOGGLE: {
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(s * 0.08f);
+                cv.drawRoundRect(new RectF(s * 0.10f, s * 0.30f, s * 0.90f, s * 0.70f), s * 0.20f, s * 0.20f, p);
+                p.setStyle(Paint.Style.FILL);
+                cv.drawCircle(s * 0.68f, s * 0.50f, s * 0.11f, p);
                 break;
             }
             default:

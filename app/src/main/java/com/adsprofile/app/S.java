@@ -2,12 +2,20 @@ package com.adsprofile.app;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Build;
+import android.os.UserManager;
 
 class S {
     static SharedPreferences sp(Context c) { return c.getSharedPreferences("ads", 0); }
     static boolean ha(Context c) { return "ha".equals(sp(c).getString("lang", "en")); }
     static void setHa(Context c, boolean ha) { sp(c).edit().putString("lang", ha ? "ha" : "en").apply(); }
     static String t(Context c, String en, String ha) { return ha(c) ? ha : en; }
+    static boolean isManaged(Context c) {
+        return Build.VERSION.SDK_INT >= 30 && ((UserManager) c.getSystemService(Context.USER_SERVICE)).isManagedProfile();
+    }
+    // which profile the Personal / Work buttons have selected for reset (default: the profile this copy lives in)
+    static boolean selWork(Context c, boolean def) { return sp(c).getBoolean("selWork", def); }
+    static void setSelWork(Context c, boolean v) { sp(c).edit().putBoolean("selWork", v).apply(); }
     static boolean floatOn(Context c) { return sp(c).getBoolean("float", false); }
     static void setFloat(Context c, boolean v) { sp(c).edit().putBoolean("float", v).apply(); }
     static long lastAd(Context c) { return sp(c).getLong("lastAd", 0); }
