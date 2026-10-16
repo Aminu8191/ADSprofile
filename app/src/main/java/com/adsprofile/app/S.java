@@ -5,7 +5,7 @@ import android.content.SharedPreferences;
 
 class S {
     static SharedPreferences sp(Context c) { return c.getSharedPreferences("ads", 0); }
-    static boolean ha(Context c) { return !"en".equals(sp(c).getString("lang", "ha")); }
+    static boolean ha(Context c) { return "ha".equals(sp(c).getString("lang", "en")); }
     static void setHa(Context c, boolean ha) { sp(c).edit().putString("lang", ha ? "ha" : "en").apply(); }
     static String t(Context c, String en, String ha) { return ha(c) ? ha : en; }
     static boolean floatOn(Context c) { return sp(c).getBoolean("float", false); }

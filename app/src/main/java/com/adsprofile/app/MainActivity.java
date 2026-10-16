@@ -6,6 +6,7 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.CrossProfileApps;
+import android.content.res.ColorStateList;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -24,13 +25,13 @@ import android.widget.Toast;
 import com.google.android.gms.ads.AdRequest;
 import com.google.android.gms.ads.AdSize;
 import com.google.android.gms.ads.AdView;
-import com.google.android.gms.ads.MobileAds;
 import java.util.List;
 
 public class MainActivity extends Activity {
     AdView banner;
     Switch sw;
     boolean building = true;
+    boolean shownHa;
 
     String tr(String en, String ha) {
         return S.t(this, en, ha);
@@ -50,11 +51,7 @@ public class MainActivity extends Activity {
         super.onCreate(b);
         getWindow().setStatusBarColor(0xFF02200F);
         getWindow().setNavigationBarColor(0xFF04180F);
-        new Thread(new Runnable() {
-            public void run() {
-                MobileAds.initialize(MainActivity.this, status -> { });
-            }
-        }).start();
+        shownHa = S.ha(this);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -69,11 +66,15 @@ public class MainActivity extends Activity {
         sv.addView(page);
         root.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        // language switch
+        // top bar: settings button (language and contact live inside)
         LinearLayout bar = new LinearLayout(this);
         bar.setGravity(Gravity.END);
-        bar.addView(langPill("Hausa", true));
-        bar.addView(langPill("English", false));
+        FrameLayout gear = new FrameLayout(this);
+        gear.setBackground(Ui.ripple(this, Ui.shape(this, 0x1AFFFFFF, Ui.GOLD, 22), 22));
+        gear.setClickable(true);
+        gear.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
+        gear.addView(new IconView(this, IconView.GEAR, Ui.GOLD), new FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER));
+        bar.addView(gear, new LinearLayout.LayoutParams(dp(44), dp(44)));
         page.addView(bar, new LinearLayout.LayoutParams(-1, -2));
 
         ImageView logo = new ImageView(this);
@@ -86,39 +87,61 @@ public class MainActivity extends Activity {
         TextView t = Ui.tv(this, "ADS profile", 32, 0xFFFFFFFF, true);
         t.setGravity(Gravity.CENTER);
         page.addView(t);
-        TextView s = Ui.tv(this, tr("Choose your profile", "Zabi profile dinka"), 15, 0xFFB7DCC4, false);
+        TextView s = Ui.tv(this, tr("Choose your profile", "Zabi profile dinka"), 15, Ui.MINT, false);
         s.setGravity(Gravity.CENTER);
         s.setPadding(0, dp(4), 0, dp(20));
         page.addView(s);
 
-        Button personal = Ui.button(this, "Personal", true);
+        // Personal and Work: one row, two halves
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        Button personal = Ui.half(this, "Personal", true, true);
         personal.setOnClickListener(v -> Ads.open(this));
-        page.addView(personal);
-        Button work = Ui.button(this, "Work", false);
+        Button work = Ui.half(this, "Work", false, false);
         work.setOnClickListener(v -> openWork());
-        page.addView(work);
-        Button reset = Ui.button(this, tr("Reset Ads ID now", "Reset Ads ID yanzu"), false);
-        reset.setOnClickListener(v -> ResetService.request(this));
-        page.addView(reset);
+        row.addView(personal);
+        row.addView(work);
+        page.addView(row, new LinearLayout.LayoutParams(-1, -2));
 
-        // floating button card
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(16), dp(14), dp(16), dp(14));
-        card.setBackground(Ui.shape(this, 0x22FFFFFF, 0, 18));
+        // Reset Ads ID now
+        LinearLayout reset = new LinearLayout(this);
+        reset.setOrientation(LinearLayout.HORIZONTAL);
+        reset.setGravity(Gravity.CENTER);
+        reset.setClickable(true);
+        reset.setBackground(Ui.ripple(this, Ui.shape(this, 0x1AFFFFFF, Ui.GOLD, 24), 24));
+        reset.addView(new IconView(this, IconView.RESET, Ui.GOLD), new LinearLayout.LayoutParams(dp(24), dp(24)));
+        TextView rt = Ui.tv(this, tr("Reset Ads ID now", "Reset Ads ID yanzu"), 19, Ui.GOLD, true);
+        rt.setPadding(dp(10), 0, 0, 0);
+        reset.addView(rt);
+        reset.setOnClickListener(v -> ResetService.request(this));
+        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, dp(64));
+        rp.setMargins(0, dp(8), 0, dp(8));
+        page.addView(reset, rp);
+
+        // Floating button: one slim row with a switch
+        LinearLayout fr = new LinearLayout(this);
+        fr.setOrientation(LinearLayout.HORIZONTAL);
+        fr.setGravity(Gravity.CENTER_VERTICAL);
+        fr.setClickable(true);
+        fr.setPadding(dp(20), dp(12), dp(16), dp(12));
+        fr.setBackground(Ui.ripple(this, Ui.shape(this, 0x1AFFFFFF, 0x66F2B705, 24), 24));
+        LinearLayout txt = new LinearLayout(this);
+        txt.setOrientation(LinearLayout.VERTICAL);
+        txt.addView(Ui.tv(this, tr("Floating button", "Ma\u0253allin shawagi"), 17, 0xFFFFFFFF, true));
+        TextView hint = Ui.tv(this, tr("Tap once to reset. Drag it to the X to remove it.",
+                "Danna sau \u0257aya don reset. Ja shi zuwa X don cire shi."), 12, Ui.MINT, false);
+        hint.setPadding(0, dp(2), 0, 0);
+        txt.addView(hint);
+        fr.addView(txt, new LinearLayout.LayoutParams(0, -2, 1f));
         sw = new Switch(this);
-        sw.setText(tr("Floating button", "Maɓallin shawagi"));
-        sw.setTextColor(0xFFFFFFFF);
-        sw.setTextSize(17);
-        sw.setTypeface(null, android.graphics.Typeface.BOLD);
-        card.addView(sw);
-        TextView hint = Ui.tv(this, tr("A button on your screen. Tap it once to reset the Ads ID. Drag it anywhere, or drag it to the X at the bottom to remove it.",
-                "Maɓalli a kan allonka. Ka danna shi sau ɗaya don reset na Ads ID. Ka ja shi ko'ina, ko ka ja shi zuwa X a ƙasa don cire shi."), 13, 0xFFB7DCC4, false);
-        hint.setPadding(0, dp(6), 0, 0);
-        card.addView(hint);
-        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
-        cp.topMargin = dp(14);
-        page.addView(card, cp);
+        int[][] st = {{android.R.attr.state_checked}, {}};
+        sw.setThumbTintList(new ColorStateList(st, new int[]{Ui.GOLD, 0xFFB7DCC4}));
+        sw.setTrackTintList(new ColorStateList(st, new int[]{0x88F2B705, 0x33FFFFFF}));
+        fr.addView(sw, new LinearLayout.LayoutParams(-2, -2));
+        fr.setOnClickListener(v -> sw.toggle());
+        LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
+        fp.setMargins(0, dp(8), 0, 0);
+        page.addView(fr, fp);
         sw.setOnCheckedChangeListener((btn, on) -> {
             if (building) return;
             if (on) enableFloat();
@@ -127,7 +150,7 @@ public class MainActivity extends Activity {
 
         View sp = new View(this);
         page.addView(sp, new LinearLayout.LayoutParams(1, 0, 1f));
-        TextView pw = Ui.tv(this, "Powered by Al-ameen", 14, 0xFFF2B705, false);
+        TextView pw = Ui.tv(this, "Powered by Al-ameen", 14, Ui.GOLD, false);
         pw.setGravity(Gravity.CENTER);
         pw.setPadding(0, dp(18), 0, dp(6));
         page.addView(pw);
@@ -144,15 +167,6 @@ public class MainActivity extends Activity {
 
         setContentView(root);
         building = false;
-    }
-
-    TextView langPill(String name, boolean ha) {
-        TextView v = Ui.pill(this, name, S.ha(this) == ha);
-        v.setOnClickListener(x -> {
-            S.setHa(this, ha);
-            recreate();
-        });
-        return v;
     }
 
     void openWork() {
@@ -203,6 +217,10 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (S.ha(this) != shownHa) {
+            recreate();
+            return;
+        }
         if (banner != null) banner.resume();
         boolean on = S.floatOn(this);
         if (on && !FloatingService.running && Settings.canDrawOverlays(this)) {

@@ -17,18 +17,18 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import com.google.android.gms.ads.AdError;
-import com.google.android.gms.ads.AdRequest;
 import com.google.android.gms.ads.FullScreenContentCallback;
-import com.google.android.gms.ads.LoadAdError;
-import com.google.android.gms.ads.MobileAds;
 import com.google.android.gms.ads.appopen.AppOpenAd;
 
 // Glowing logo, then an App Open ad on top of the splash, then the app.
 public class SplashActivity extends Activity {
     final Handler h = new Handler(Looper.getMainLooper());
     boolean minDone, timeoutDone, wentMain, shown;
-    int adState = 0;   // 0 loading, 1 loaded, 2 failed
-    AppOpenAd ad;
+    final Runnable ping = new Runnable() {
+        public void run() {
+            proceed();
+        }
+    };
 
     boolean launchedFromSelf() {
         Uri r = getReferrer();
@@ -108,45 +108,35 @@ public class SplashActivity extends Activity {
                 timeoutDone = true;
                 proceed();
             }
-        }, 5000);
+        }, 6000);
 
-        new Thread(new Runnable() {
-            public void run() {
-                MobileAds.initialize(SplashActivity.this, status -> runOnUiThread(new Runnable() {
-                    public void run() {
-                        loadAd();
-                    }
-                }));
-            }
-        }).start();
+        // The ad is normally already loading (App.java). This listens for it and asks again if it never started.
+        AppOpen.listener = ping;
+        AppOpen.preload(this);
     }
 
-    void loadAd() {
-        AppOpenAd.load(this, AdIds.APP_OPEN, new AdRequest.Builder().build(), new AppOpenAd.AppOpenAdLoadCallback() {
-            @Override
-            public void onAdLoaded(AppOpenAd a) {
-                ad = a;
-                adState = 1;
-                proceed();
-            }
-
-            @Override
-            public void onAdFailedToLoad(LoadAdError e) {
-                adState = 2;
-                proceed();
-            }
-        });
+    @Override
+    protected void onDestroy() {
+        h.removeCallbacksAndMessages(null);
+        if (AppOpen.listener == ping) AppOpen.listener = null;
+        super.onDestroy();
     }
 
     void proceed() {
-        if (wentMain || shown || !minDone) return;
+        if (wentMain || shown || !minDone || isFinishing()) return;
         boolean capOk = System.currentTimeMillis() - S.lastAd(this) > 60000;
-        if (adState == 1 && ad != null && capOk && !isFinishing()) {
+        if (capOk && AppOpen.ready()) {
             shown = true;
-            S.setLastAd(this, System.currentTimeMillis());
-            ad.setFullScreenContentCallback(new FullScreenContentCallback() {
+            AppOpenAd a = AppOpen.take();
+            a.setFullScreenContentCallback(new FullScreenContentCallback() {
+                @Override
+                public void onAdShowedFullScreenContent() {
+                    S.setLastAd(SplashActivity.this, System.currentTimeMillis());
+                }
+
                 @Override
                 public void onAdDismissedFullScreenContent() {
+                    AppOpen.preload(SplashActivity.this);
                     goMain();
                 }
 
@@ -155,8 +145,8 @@ public class SplashActivity extends Activity {
                     goMain();
                 }
             });
-            ad.show(this);
-        } else if (adState == 2 || timeoutDone || (adState == 1 && !capOk)) {
+            a.show(this);
+        } else if (!capOk || AppOpen.failed || timeoutDone) {
             goMain();
         }
     }
