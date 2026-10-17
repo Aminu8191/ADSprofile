@@ -10,6 +10,7 @@ import android.content.res.ColorStateList;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.view.Gravity;
@@ -34,6 +35,8 @@ public class MainActivity extends Activity {
     boolean shownHa;
     boolean selWork;
     Button personalBtn, workBtn;
+    long lastTap;
+    boolean lastTapWork;
 
     String tr(String en, String ha) {
         return S.t(this, en, ha);
@@ -99,12 +102,16 @@ public class MainActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         personalBtn = Ui.half(this, "Personal", !selWork, true);
-        personalBtn.setOnClickListener(v -> select(false));
+        personalBtn.setOnClickListener(v -> tap(false));
         workBtn = Ui.half(this, "Work", selWork, false);
-        workBtn.setOnClickListener(v -> select(true));
+        workBtn.setOnClickListener(v -> tap(true));
         row.addView(personalBtn);
         row.addView(workBtn);
         page.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        TextView selHint = Ui.tv(this, tr("Tap to select. Double-tap to open its Ads page.",
+                "Danna sau \u0257aya don za\u0253a. Sau biyu don bu\u0257e shafin Ads."), 12, Ui.MINT, false);
+        selHint.setGravity(Gravity.CENTER);
+        page.addView(selHint, new LinearLayout.LayoutParams(-1, -2));
 
         // Reset Ads ID now
         LinearLayout reset = new LinearLayout(this);
@@ -170,6 +177,19 @@ public class MainActivity extends Activity {
 
         setContentView(root);
         building = false;
+    }
+
+    // one tap selects; a second tap on the same button within a moment opens that profile's Ads page
+    void tap(boolean work) {
+        long now = SystemClock.elapsedRealtime();
+        boolean dbl = lastTap != 0 && now - lastTap < 380 && lastTapWork == work;
+        lastTap = dbl ? 0 : now;
+        lastTapWork = work;
+        select(work);
+        if (dbl) {
+            if (work == S.isManaged(this)) Ads.open(this);
+            else Reset.remoteAds(this);
+        }
     }
 
     void select(boolean work) {

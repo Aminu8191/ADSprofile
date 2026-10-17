@@ -42,7 +42,14 @@ public class SplashActivity extends Activity {
     @Override
     public void onCreate(Bundle b) {
         super.onCreate(b);
-        // The other copy (main or work) asked this copy to reset the Ads ID of this profile.
+        // The other copy (main or work) sent a command: open the Ads page, or reset the Ads ID of this profile.
+        String cmd = getIntent() == null ? null : getIntent().getStringExtra("cmd");
+        if ("ads".equals(cmd)) {
+            Ads.open(this);
+            finish();
+            overridePendingTransition(0, 0);
+            return;
+        }
         if (launchedFromSelf()) {
             ResetService.request(this, ResetService.MODE_GREEN);
             finish();
