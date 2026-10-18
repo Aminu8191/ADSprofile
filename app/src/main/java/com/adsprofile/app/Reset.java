@@ -6,8 +6,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.CrossProfileApps;
 import android.os.Build;
-import android.os.Handler;
-import android.os.Looper;
 import android.os.UserHandle;
 import android.widget.Toast;
 import java.util.List;
@@ -21,36 +19,28 @@ class Reset {
             // the profile this copy lives in
             ResetService.request(c, fromFloating ? ResetService.MODE_FREEZE : ResetService.MODE_GREEN);
         } else {
-            remote(c, fromFloating);
+            // the other profile: this copy's Accessibility does the tapping there
+            ResetService.request(c, fromFloating ? ResetService.MODE_FREEZE : ResetService.MODE_GREEN, true);
         }
     }
 
-    // Ask the copy in the other profile to do its own reset (it starts, resets and tells you the result).
-    static void remote(Context c, boolean fromFloating) {
+    // Opens the Ads page inside the other profile (its copy of the app starts and shows the page).
+    // The tapping is then done by this copy's own Accessibility service.
+    static boolean launchOtherAds(Context c) {
         if (Build.VERSION.SDK_INT >= 28) {
             try {
                 CrossProfileApps cpa = c.getSystemService(CrossProfileApps.class);
                 List<UserHandle> l = cpa.getTargetUserProfiles();
                 if (!l.isEmpty()) {
                     cpa.startMainActivity(new ComponentName(c, SplashActivity.class), l.get(0));
-                    if (fromFloating) {
-                        final ResetService.Listener ls = ResetService.listener;
-                        if (ls != null) {
-                            ls.busy(true);
-                            new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-                                public void run() {
-                                    ls.busy(false);
-                                }
-                            }, 5000);
-                        }
-                    }
-                    return;
+                    return true;
                 }
             } catch (Exception ignored) {
             }
         }
         Toast.makeText(c, S.t(c, "No other profile found, or the app is not installed in it.",
                 "Ba a sami wani profile ba, ko kuwa ba a shigar da app a cikinsa ba."), Toast.LENGTH_LONG).show();
+        return false;
     }
 
     // Double-tap on the other profile's button: its copy opens its own Ads page (for resetting by hand).

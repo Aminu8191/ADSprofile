@@ -35,7 +35,7 @@ public class ResetService extends AccessibilityService {
     volatile String before;
     Thread beforeThread;
     final Handler h = new Handler(Looper.getMainLooper());
-    boolean running, finishing;
+    boolean running, finishing, remoteMode;
     int stage;
     long deadline;
     WindowManager wm;
@@ -64,13 +64,18 @@ public class ResetService extends AccessibilityService {
     }
 
     static void request(Context c, int mode) {
+        request(c, mode, false);
+    }
+
+    // remote = reset the OTHER profile: this copy opens that profile's Ads page and taps the buttons itself
+    static void request(Context c, int mode, boolean remote) {
         ResetService s = instance;
         if (s == null) {
             Toast.makeText(c, S.t(c, "Turn on Accessibility for ADS profile first.",
                     "Kunna Accessibility na ADS profile tukuna."), Toast.LENGTH_LONG).show();
             return;
         }
-        s.start(mode);
+        s.start(mode, remote);
     }
 
     void setBusy(boolean b) {
@@ -89,19 +94,23 @@ public class ResetService extends AccessibilityService {
         }
     }
 
-    void start(int mode) {
+    void start(int mode, boolean remote) {
         if (running) return;
         running = true;
         finishing = false;
+        remoteMode = remote;
         stage = 0;
         setBusy(true);
         before = null;
-        beforeThread = new Thread(new Runnable() {
-            public void run() {
-                before = adId();
-            }
-        });
-        beforeThread.start();
+        beforeThread = null;
+        if (!remote) {   // the ID of the other profile cannot be read from here
+            beforeThread = new Thread(new Runnable() {
+                public void run() {
+                    before = adId();
+                }
+            });
+            beforeThread.start();
+        }
         if (mode == MODE_FREEZE && Build.VERSION.SDK_INT >= 30) {
             freezeThenGo();
         } else {
@@ -113,8 +122,16 @@ public class ResetService extends AccessibilityService {
     // open the Ads page and start tapping
     void go() {
         deadline = System.currentTimeMillis() + 9000;
-        Ads.open(this);
-        h.postDelayed(step, 450);
+        if (remoteMode) {
+            if (!Reset.launchOtherAds(this)) {
+                done(false);
+                return;
+            }
+            h.postDelayed(step, 900);
+        } else {
+            Ads.open(this);
+            h.postDelayed(step, 450);
+        }
     }
 
     // Take a picture of the current screen first, cover the screen with it, then open the Ads page.
@@ -321,7 +338,15 @@ public class ResetService extends AccessibilityService {
                 hideCurtain();
             }
         }, 700);
-        verify();
+        if (remoteMode) {
+            h.postDelayed(new Runnable() {
+                public void run() {
+                    finishVerify(0);
+                }
+            }, 800);
+        } else {
+            verify();
+        }
     }
 
     // 1 = ID changed, 2 = same ID, 0 = could not check
