@@ -42,11 +42,19 @@ public class SplashActivity extends Activity {
     @Override
     public void onCreate(Bundle b) {
         super.onCreate(b);
-        // The other copy (main or work) asked this copy to show the Ads page of this profile.
-        // The tapping is done by the Accessibility service of the copy that asked.
+        // The other copy (main or work) sent a command.
         String cmd = getIntent() == null ? null : getIntent().getStringExtra("cmd");
-        if ("ads".equals(cmd) || launchedFromSelf()) {
-            Ads.open(this);
+        if (cmd != null || launchedFromSelf()) {
+            boolean managed = S.isManaged(this);
+            if ("ads".equals(cmd) || (managed && cmd == null)) {
+                // show the Ads page of this profile; the copy that asked taps the buttons
+                Ads.open(this);
+            } else if ("reset-local".equals(cmd)) {
+                ResetService.request(this, ResetService.MODE_GREEN, false);
+            } else {
+                // the work copy has no Accessibility: reset the work profile from here
+                ResetService.request(this, ResetService.MODE_GREEN, true);
+            }
             finish();
             overridePendingTransition(0, 0);
             return;

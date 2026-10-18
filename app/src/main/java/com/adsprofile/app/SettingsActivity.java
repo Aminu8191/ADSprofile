@@ -144,7 +144,11 @@ public class SettingsActivity extends Activity {
 
     void refreshAcc() {
         if (accSub == null) return;
-        if (accOn()) {
+        if (S.isManaged(this)) {
+            accSub.setText(tr("Not needed in this profile. The main app taps for you.",
+                    "Ba a bu\u0199ata a nan. Main app ne ke dannawa."));
+            accSub.setTextColor(0xFF7DDC9A);
+        } else if (accOn()) {
             accSub.setText(tr("On", "A kunne"));
             accSub.setTextColor(0xFF7DDC9A);
         } else {

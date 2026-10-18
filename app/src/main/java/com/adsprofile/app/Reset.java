@@ -6,6 +6,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.CrossProfileApps;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.UserHandle;
 import android.widget.Toast;
 import java.util.List;
@@ -15,13 +17,37 @@ class Reset {
     static void go(Context c, boolean fromFloating) {
         boolean managed = S.isManaged(c);
         boolean wantWork = S.selWork(c, managed);
+        int mode = fromFloating ? ResetService.MODE_FREEZE : ResetService.MODE_GREEN;
         if (wantWork == managed) {
             // the profile this copy lives in
-            ResetService.request(c, fromFloating ? ResetService.MODE_FREEZE : ResetService.MODE_GREEN);
+            if (!managed || ResetService.instance != null) {
+                ResetService.request(c, mode);
+            } else {
+                // work copy without its own Accessibility: the main copy does the tapping for it
+                if (launchOther(c) && fromFloating) spinFor(5000);
+            }
+        } else if (!managed) {
+            // main copy, work profile selected: this copy's Accessibility does the tapping there
+            ResetService.request(c, mode, true);
+        } else if (c instanceof Activity && Build.VERSION.SDK_INT >= 30) {
+            // work copy, Personal selected: ask the main copy to reset its own profile
+            remoteCmd((Activity) c, "reset-local");
         } else {
-            // the other profile: this copy's Accessibility does the tapping there
-            ResetService.request(c, fromFloating ? ResetService.MODE_FREEZE : ResetService.MODE_GREEN, true);
+            Toast.makeText(c, S.t(c, "Select Work here, or use the button in the main app.",
+                    "Za\u0253i Work a nan, ko ka yi amfani da ma\u0253allin main app."), Toast.LENGTH_LONG).show();
         }
+    }
+
+    // keeps the floating button spinning for a while (the other copy does the work and cannot tell us when it is done)
+    static void spinFor(long ms) {
+        final ResetService.Listener ls = ResetService.listener;
+        if (ls == null) return;
+        ls.busy(true);
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+            public void run() {
+                ls.busy(false);
+            }
+        }, ms);
     }
 
     // Opens the Ads page inside the other profile (its copy of the app starts and shows the page).
@@ -45,6 +71,11 @@ class Reset {
 
     // Double-tap on the other profile's button: its copy opens its own Ads page (for resetting by hand).
     static void remoteAds(Activity a) {
+        remoteCmd(a, "ads");
+    }
+
+    // Sends a command to the copy in the other profile: "ads" opens its Ads page, "reset-local" resets its own profile.
+    static void remoteCmd(Activity a, String cmd) {
         if (Build.VERSION.SDK_INT >= 30) {
             try {
                 CrossProfileApps cpa = a.getSystemService(CrossProfileApps.class);
@@ -53,7 +84,7 @@ class Reset {
                     Intent i = new Intent(a, SplashActivity.class);
                     i.setAction(Intent.ACTION_MAIN);
                     i.addCategory(Intent.CATEGORY_LAUNCHER);
-                    i.putExtra("cmd", "ads");
+                    i.putExtra("cmd", cmd);
                     cpa.startActivity(i, l.get(0), a);
                     return;
                 }

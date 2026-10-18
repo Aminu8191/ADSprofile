@@ -213,7 +213,7 @@ public class MainActivity extends Activity {
         }
         S.setFloat(this, true);
         startForegroundService(new Intent(this, FloatingService.class));
-        if (!serviceOn()) {
+        if (!S.isManaged(this) && !serviceOn()) {
             Toast.makeText(this, tr("Also turn on Accessibility for ADS profile, or the button cannot tap.",
                     "Kunna Accessibility na ADS profile ma, in ba haka ba maɓallin ba zai iya dannawa ba."), Toast.LENGTH_LONG).show();
             startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
