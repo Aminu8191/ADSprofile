@@ -10,22 +10,31 @@ import android.content.pm.ServiceInfo;
 import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.UserManager;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.WindowManager;
 
-// Draws the draggable floating buttons over other apps: green = Personal, brown-gold = Work.
+// Draws the draggable floating button over other apps.
 public class FloatingService extends Service {
     static volatile boolean running = false;
+    static volatile FloatingService inst;   // so the reset can copy the button onto its still picture
     WindowManager wm;
+    FabView fab;
     CloseView close;
-    WindowManager.LayoutParams clp;
-    Fab personal, work;
+    WindowManager.LayoutParams lp, clp;
+    float downX, downY;
+    int startX, startY;
+    boolean moved;
 
     int dp(float v) {
         return Ui.dp(this, v);
+    }
+
+    boolean isManaged() {
+        return Build.VERSION.SDK_INT >= 30 && ((UserManager) getSystemService(USER_SERVICE)).isManagedProfile();
     }
 
     int overlayType() {
@@ -33,119 +42,12 @@ public class FloatingService extends Service {
                 : WindowManager.LayoutParams.TYPE_PHONE;
     }
 
-    class Fab implements View.OnTouchListener {
-        final boolean isWork;
-        FabView view;
-        WindowManager.LayoutParams lp;
-        float downX, downY;
-        int startX, startY;
-        boolean moved;
-
-        Fab(boolean w) {
-            isWork = w;
-        }
-
-        void add() {
-            int size = dp(56);
-            int sw = getResources().getDisplayMetrics().widthPixels;
-            lp = new WindowManager.LayoutParams(size, size, overlayType(),
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                    PixelFormat.TRANSLUCENT);
-            lp.gravity = Gravity.TOP | Gravity.START;
-            lp.x = S.fx(FloatingService.this, isWork, sw - size - dp(10));
-            lp.y = S.fy(FloatingService.this, isWork, dp(isWork ? 340 : 260));
-            view = new FabView(FloatingService.this, isWork ? 0xFF8A5A00 : 0xFF0A6B38);
-            view.setOnTouchListener(this);
-            wm.addView(view, lp);
-        }
-
-        void remove() {
-            if (view != null) {
-                try {
-                    wm.removeView(view);
-                } catch (Exception ignored) {
-                }
-                view = null;
-            }
-        }
-
-        boolean overClose() {
-            int sw = getResources().getDisplayMetrics().widthPixels;
-            int sh = getResources().getDisplayMetrics().heightPixels;
-            float fx = lp.x + lp.width / 2f, fy = lp.y + lp.height / 2f;
-            float cx = sw / 2f, cy = sh - dp(56) - dp(32);
-            return Math.hypot(fx - cx, fy - cy) < dp(70);
-        }
-
-        @Override
-        public boolean onTouch(View v, MotionEvent e) {
-            int slop = ViewConfiguration.get(FloatingService.this).getScaledTouchSlop();
-            switch (e.getAction()) {
-                case MotionEvent.ACTION_DOWN:
-                    downX = e.getRawX();
-                    downY = e.getRawY();
-                    startX = lp.x;
-                    startY = lp.y;
-                    moved = false;
-                    view.setDown(true);
-                    return true;
-                case MotionEvent.ACTION_MOVE:
-                    float dx = e.getRawX() - downX, dy = e.getRawY() - downY;
-                    if (!moved && Math.hypot(dx, dy) > slop) {
-                        moved = true;
-                        showClose();
-                    }
-                    if (moved) {
-                        lp.x = (int) (startX + dx);
-                        lp.y = (int) (startY + dy);
-                        wm.updateViewLayout(view, lp);
-                        if (close != null) close.setHot(overClose());
-                    }
-                    return true;
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    view.setDown(false);
-                    if (moved) {
-                        boolean over = overClose();
-                        hideClose();
-                        if (over) {
-                            S.setFab(FloatingService.this, isWork, false);
-                            sync();
-                        } else {
-                            S.setPos(FloatingService.this, isWork, lp.x, lp.y);
-                        }
-                    } else if (e.getAction() == MotionEvent.ACTION_UP) {
-                        ResetService.request(FloatingService.this, isWork);
-                    }
-                    return true;
-            }
-            return false;
-        }
-    }
-
-    // Shows or hides each button to match the switches in the app. Stops the service when none is left.
-    void sync() {
-        if (wm == null) wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-        if (S.fabOn(this, false)) {
-            if (personal == null) personal = new Fab(false);
-            if (personal.view == null) personal.add();
-        } else if (personal != null) {
-            personal.remove();
-        }
-        if (S.fabOn(this, true)) {
-            if (work == null) work = new Fab(true);
-            if (work.view == null) work.add();
-        } else if (work != null) {
-            work.remove();
-        }
-        if (!S.fabOn(this, false) && !S.fabOn(this, true)) stopSelf();
-    }
-
     @Override
     public int onStartCommand(Intent i, int flags, int id) {
         if (i != null && "STOP".equals(i.getAction())) {
-            S.setFab(this, false, false);
-            S.setFab(this, true, false);
+            S.setFloat(this, false);
+            stopSelf();
+            return START_NOT_STICKY;
         }
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         nm.createNotificationChannel(new NotificationChannel("float", "ADS profile", NotificationManager.IMPORTANCE_LOW));
@@ -166,9 +68,75 @@ public class FloatingService extends Service {
         } else {
             startForeground(21, n);
         }
+        if (fab == null) addFab();
         running = true;
-        sync();
         return START_STICKY;
+    }
+
+    void addFab() {
+        wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+        int size = dp(56);
+        int sw = getResources().getDisplayMetrics().widthPixels;
+        lp = new WindowManager.LayoutParams(size, size, overlayType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT);
+        lp.gravity = Gravity.TOP | Gravity.START;
+        lp.x = S.fx(this, sw - size - dp(10));
+        lp.y = S.fy(this, dp(260));
+        // green for the main profile, gold-brown for the work profile, so you can tell them apart
+        fab = new FabView(this, isManaged() ? 0xFF8A5A00 : 0xFF0A6B38);
+        final int slop = ViewConfiguration.get(this).getScaledTouchSlop();
+        fab.setOnTouchListener(new View.OnTouchListener() {
+            public boolean onTouch(View v, MotionEvent e) {
+                switch (e.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        downX = e.getRawX();
+                        downY = e.getRawY();
+                        startX = lp.x;
+                        startY = lp.y;
+                        moved = false;
+                        fab.setDown(true);
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        float dx = e.getRawX() - downX, dy = e.getRawY() - downY;
+                        if (!moved && Math.hypot(dx, dy) > slop) {
+                            moved = true;
+                            showClose();
+                        }
+                        if (moved) {
+                            lp.x = (int) (startX + dx);
+                            lp.y = (int) (startY + dy);
+                            wm.updateViewLayout(fab, lp);
+                            if (close != null) close.setHot(overClose());
+                        }
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        fab.setDown(false);
+                        if (moved) {
+                            boolean over = overClose();
+                            hideClose();
+                            if (over) {
+                                S.setFloat(FloatingService.this, false);
+                                stopSelf();
+                            } else {
+                                S.setPos(FloatingService.this, lp.x, lp.y);
+                            }
+                        } else if (e.getAction() == MotionEvent.ACTION_UP) {
+                            Reset.go(FloatingService.this, true);
+                        }
+                        return true;
+                }
+                return false;
+            }
+        });
+        wm.addView(fab, lp);
+        inst = this;
+        ResetService.listener = new ResetService.Listener() {
+            public void busy(boolean b) {
+                if (fab != null) fab.setSpin(b);
+            }
+        };
     }
 
     void showClose() {
@@ -194,12 +162,27 @@ public class FloatingService extends Service {
         }
     }
 
+    boolean overClose() {
+        int sw = getResources().getDisplayMetrics().widthPixels;
+        int sh = getResources().getDisplayMetrics().heightPixels;
+        float fx = lp.x + lp.width / 2f, fy = lp.y + lp.height / 2f;
+        float cx = sw / 2f, cy = sh - dp(56) - dp(32);
+        return Math.hypot(fx - cx, fy - cy) < dp(70);
+    }
+
     @Override
     public void onDestroy() {
         running = false;
+        inst = null;
+        ResetService.listener = null;
         hideClose();
-        if (personal != null) personal.remove();
-        if (work != null) work.remove();
+        if (fab != null) {
+            try {
+                wm.removeView(fab);
+            } catch (Exception ignored) {
+            }
+            fab = null;
+        }
         super.onDestroy();
     }
 
