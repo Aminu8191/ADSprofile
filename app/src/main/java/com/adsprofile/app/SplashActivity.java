@@ -4,7 +4,6 @@ import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Intent;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -17,23 +16,18 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import com.google.android.gms.ads.AdError;
+import com.google.android.gms.ads.AdRequest;
 import com.google.android.gms.ads.FullScreenContentCallback;
+import com.google.android.gms.ads.LoadAdError;
+import com.google.android.gms.ads.MobileAds;
 import com.google.android.gms.ads.appopen.AppOpenAd;
 
 // Glowing logo, then an App Open ad on top of the splash, then the app.
 public class SplashActivity extends Activity {
     final Handler h = new Handler(Looper.getMainLooper());
     boolean minDone, timeoutDone, wentMain, shown;
-    final Runnable ping = new Runnable() {
-        public void run() {
-            proceed();
-        }
-    };
-
-    boolean launchedFromSelf() {
-        Uri r = getReferrer();
-        return r != null && getPackageName().equals(r.getHost());
-    }
+    int adState = 0;   // 0 loading, 1 loaded, 2 failed
+    AppOpenAd ad;
 
     boolean isManaged() {
         return Build.VERSION.SDK_INT >= 30 && ((UserManager) getSystemService(USER_SERVICE)).isManagedProfile();
@@ -42,18 +36,10 @@ public class SplashActivity extends Activity {
     @Override
     public void onCreate(Bundle b) {
         super.onCreate(b);
-        // The other copy (main or work) sent a command: open the Ads page, or reset the Ads ID of this profile.
-        String cmd = getIntent() == null ? null : getIntent().getStringExtra("cmd");
-        if ("ads".equals(cmd)) {
+        // The copy inside the work profile has no screen of its own: it just opens the work Ads page.
+        if (isManaged()) {
             Ads.open(this);
             finish();
-            overridePendingTransition(0, 0);
-            return;
-        }
-        if (launchedFromSelf()) {
-            ResetService.request(this, ResetService.MODE_GREEN);
-            finish();
-            overridePendingTransition(0, 0);
             return;
         }
         getWindow().setStatusBarColor(0xFF02200F);
@@ -116,35 +102,45 @@ public class SplashActivity extends Activity {
                 timeoutDone = true;
                 proceed();
             }
-        }, 6000);
+        }, 5000);
 
-        // The ad is normally already loading (App.java). This listens for it and asks again if it never started.
-        AppOpen.listener = ping;
-        AppOpen.preload(this);
+        new Thread(new Runnable() {
+            public void run() {
+                MobileAds.initialize(SplashActivity.this, status -> runOnUiThread(new Runnable() {
+                    public void run() {
+                        loadAd();
+                    }
+                }));
+            }
+        }).start();
     }
 
-    @Override
-    protected void onDestroy() {
-        h.removeCallbacksAndMessages(null);
-        if (AppOpen.listener == ping) AppOpen.listener = null;
-        super.onDestroy();
+    void loadAd() {
+        AppOpenAd.load(this, AdIds.APP_OPEN, new AdRequest.Builder().build(), new AppOpenAd.AppOpenAdLoadCallback() {
+            @Override
+            public void onAdLoaded(AppOpenAd a) {
+                ad = a;
+                adState = 1;
+                proceed();
+            }
+
+            @Override
+            public void onAdFailedToLoad(LoadAdError e) {
+                adState = 2;
+                proceed();
+            }
+        });
     }
 
     void proceed() {
-        if (wentMain || shown || !minDone || isFinishing()) return;
+        if (wentMain || shown || !minDone) return;
         boolean capOk = System.currentTimeMillis() - S.lastAd(this) > 60000;
-        if (capOk && AppOpen.ready()) {
+        if (adState == 1 && ad != null && capOk && !isFinishing()) {
             shown = true;
-            AppOpenAd a = AppOpen.take();
-            a.setFullScreenContentCallback(new FullScreenContentCallback() {
-                @Override
-                public void onAdShowedFullScreenContent() {
-                    S.setLastAd(SplashActivity.this, System.currentTimeMillis());
-                }
-
+            S.setLastAd(this, System.currentTimeMillis());
+            ad.setFullScreenContentCallback(new FullScreenContentCallback() {
                 @Override
                 public void onAdDismissedFullScreenContent() {
-                    AppOpen.preload(SplashActivity.this);
                     goMain();
                 }
 
@@ -153,8 +149,8 @@ public class SplashActivity extends Activity {
                     goMain();
                 }
             });
-            a.show(this);
-        } else if (!capOk || AppOpen.failed || timeoutDone) {
+            ad.show(this);
+        } else if (adState == 2 || timeoutDone || (adState == 1 && !capOk)) {
             goMain();
         }
     }

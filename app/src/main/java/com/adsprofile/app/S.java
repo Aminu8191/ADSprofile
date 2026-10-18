@@ -2,25 +2,21 @@ package com.adsprofile.app;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.os.Build;
-import android.os.UserManager;
 
 class S {
     static SharedPreferences sp(Context c) { return c.getSharedPreferences("ads", 0); }
-    static boolean ha(Context c) { return "ha".equals(sp(c).getString("lang", "en")); }
+    static boolean ha(Context c) { return !"en".equals(sp(c).getString("lang", "ha")); }
     static void setHa(Context c, boolean ha) { sp(c).edit().putString("lang", ha ? "ha" : "en").apply(); }
     static String t(Context c, String en, String ha) { return ha(c) ? ha : en; }
-    static boolean isManaged(Context c) {
-        return Build.VERSION.SDK_INT >= 30 && ((UserManager) c.getSystemService(Context.USER_SERVICE)).isManagedProfile();
-    }
-    // which profile the Personal / Work buttons have selected for reset (default: the profile this copy lives in)
-    static boolean selWork(Context c, boolean def) { return sp(c).getBoolean("selWork", def); }
-    static void setSelWork(Context c, boolean v) { sp(c).edit().putBoolean("selWork", v).apply(); }
-    static boolean floatOn(Context c) { return sp(c).getBoolean("float", false); }
-    static void setFloat(Context c, boolean v) { sp(c).edit().putBoolean("float", v).apply(); }
     static long lastAd(Context c) { return sp(c).getLong("lastAd", 0); }
     static void setLastAd(Context c, long v) { sp(c).edit().putLong("lastAd", v).apply(); }
-    static int fx(Context c, int def) { return sp(c).getInt("fx", def); }
-    static int fy(Context c, int def) { return sp(c).getInt("fy", def); }
-    static void setPos(Context c, int x, int y) { sp(c).edit().putInt("fx", x).putInt("fy", y).apply(); }
+
+    // two floating buttons: Personal (work=false) and Work (work=true)
+    static boolean fabOn(Context c, boolean work) { return sp(c).getBoolean(work ? "fabW" : "fabP", false); }
+    static void setFab(Context c, boolean work, boolean v) { sp(c).edit().putBoolean(work ? "fabW" : "fabP", v).apply(); }
+    static int fx(Context c, boolean work, int def) { return sp(c).getInt(work ? "fxW" : "fxP", def); }
+    static int fy(Context c, boolean work, int def) { return sp(c).getInt(work ? "fyW" : "fyP", def); }
+    static void setPos(Context c, boolean work, int x, int y) {
+        sp(c).edit().putInt(work ? "fxW" : "fxP", x).putInt(work ? "fyW" : "fyP", y).apply();
+    }
 }
