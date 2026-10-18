@@ -49,6 +49,7 @@ public class SplashActivity extends Activity {
             if ("ads".equals(cmd) || (managed && cmd == null)) {
                 // show the Ads page of this profile; the copy that asked taps the buttons
                 Ads.open(this);
+                AdWatch.start(this);   // says "Reset successful" when the ID really changes
             } else if ("reset-local".equals(cmd)) {
                 ResetService.request(this, ResetService.MODE_GREEN, false);
             } else {
