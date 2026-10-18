@@ -426,7 +426,7 @@ public class ResetService extends AccessibilityService {
         else if (r == 2) msg = S.t(this, "Ads ID did not change. Try again.", "Ads ID bai canza ba. Sake gwadawa.");
         else if (remoteMode) msg = S.t(this, "Reset sent to the other profile", "An aika reset zuwa \u0257ayan profile");
         else msg = S.t(this, "Reset done (could not verify)", "An yi reset (ba a iya tabbatarwa ba)");
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+        if (!(remoteMode && r == 0)) Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();   // the work copy says "Work profile: Reset successful" itself
         setBusy(false);
         running = false;
         finishing = false;
