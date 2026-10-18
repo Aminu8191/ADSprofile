@@ -61,8 +61,9 @@ class Reset {
     }
 
     // Double-tap on the other profile's button: its copy opens its own Ads page (for resetting by hand).
+    // Uses the same cross-profile start that the work reset uses (it is known to work); the other copy shows its Ads page.
     static void remoteAds(Activity a) {
-        remoteCmd(a, "ads");
+        launchOtherAds(a);
     }
 
     // Sends a command to the copy in the other profile: "ads" opens its Ads page, "reset-local" resets its own profile.
