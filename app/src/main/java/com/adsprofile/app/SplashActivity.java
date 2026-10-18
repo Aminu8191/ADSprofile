@@ -52,8 +52,8 @@ public class SplashActivity extends Activity {
             } else if ("reset-local".equals(cmd)) {
                 ResetService.request(this, ResetService.MODE_GREEN, false);
             } else {
-                // the work copy has no Accessibility: reset the work profile from here
-                ResetService.request(this, ResetService.MODE_GREEN, true);
+                // the work copy asked: do what the main copy's Personal / Work choice says
+                Reset.go(this, false);
             }
             finish();
             overridePendingTransition(0, 0);

@@ -15,26 +15,17 @@ import java.util.List;
 // Resets the profile picked with the Personal / Work buttons.
 class Reset {
     static void go(Context c, boolean fromFloating) {
-        boolean managed = S.isManaged(c);
-        boolean wantWork = S.selWork(c, managed);
+        if (S.isManaged(c)) {
+            // work copy: the main copy decides and does everything, following ITS Personal / Work choice
+            if (launchOtherAds(c) && fromFloating) spinFor(5000);
+            return;
+        }
         int mode = fromFloating ? ResetService.MODE_FREEZE : ResetService.MODE_GREEN;
-        if (wantWork == managed) {
-            // the profile this copy lives in
-            if (!managed || ResetService.instance != null) {
-                ResetService.request(c, mode);
-            } else {
-                // work copy without its own Accessibility: the main copy does the tapping for it
-                if (launchOtherAds(c) && fromFloating) spinFor(5000);
-            }
-        } else if (!managed) {
-            // main copy, work profile selected: this copy's Accessibility does the tapping there
+        if (S.selWork(c, false)) {
+            // work profile selected: this copy's Accessibility does the tapping there
             ResetService.request(c, mode, true);
-        } else if (c instanceof Activity && Build.VERSION.SDK_INT >= 30) {
-            // work copy, Personal selected: ask the main copy to reset its own profile
-            remoteCmd((Activity) c, "reset-local");
         } else {
-            Toast.makeText(c, S.t(c, "Select Work here, or use the button in the main app.",
-                    "Za\u0253i Work a nan, ko ka yi amfani da ma\u0253allin main app."), Toast.LENGTH_LONG).show();
+            ResetService.request(c, mode);
         }
     }
 

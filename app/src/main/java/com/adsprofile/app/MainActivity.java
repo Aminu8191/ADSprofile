@@ -92,26 +92,28 @@ public class MainActivity extends Activity {
         TextView t = Ui.tv(this, "ADS profile", 32, 0xFFFFFFFF, true);
         t.setGravity(Gravity.CENTER);
         page.addView(t);
-        TextView s = Ui.tv(this, tr("Choose the profile to reset", "Za\u0253i profile da za a yi reset"), 15, Ui.MINT, false);
+        TextView s = Ui.tv(this, S.isManaged(this) ? tr("Reset follows the choice in the main app", "Reset yana bin za\u0253in main app") : tr("Choose the profile to reset", "Za\u0253i profile da za a yi reset"), 15, Ui.MINT, false);
         s.setGravity(Gravity.CENTER);
         s.setPadding(0, dp(4), 0, dp(20));
         page.addView(s);
 
-        // Personal and Work: pick which profile gets reset (the gold one is selected)
-        selWork = S.selWork(this, S.isManaged(this));
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        personalBtn = Ui.half(this, "Personal", !selWork, true);
-        personalBtn.setOnClickListener(v -> tap(false));
-        workBtn = Ui.half(this, "Work", selWork, false);
-        workBtn.setOnClickListener(v -> tap(true));
-        row.addView(personalBtn);
-        row.addView(workBtn);
-        page.addView(row, new LinearLayout.LayoutParams(-1, -2));
-        TextView selHint = Ui.tv(this, tr("Tap to select. Double-tap to open its Ads page.",
-                "Danna sau \u0257aya don za\u0253a. Sau biyu don bu\u0257e shafin Ads."), 12, Ui.MINT, false);
-        selHint.setGravity(Gravity.CENTER);
-        page.addView(selHint, new LinearLayout.LayoutParams(-1, -2));
+        if (!S.isManaged(this)) {
+            // Personal and Work: pick which profile gets reset (the gold one is selected)
+            selWork = S.selWork(this, S.isManaged(this));
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            personalBtn = Ui.half(this, "Personal", !selWork, true);
+            personalBtn.setOnClickListener(v -> tap(false));
+            workBtn = Ui.half(this, "Work", selWork, false);
+            workBtn.setOnClickListener(v -> tap(true));
+            row.addView(personalBtn);
+            row.addView(workBtn);
+            page.addView(row, new LinearLayout.LayoutParams(-1, -2));
+            TextView selHint = Ui.tv(this, tr("Tap to select. Double-tap to open its Ads page.",
+                    "Danna sau \u0257aya don za\u0253a. Sau biyu don bu\u0257e shafin Ads."), 12, Ui.MINT, false);
+            selHint.setGravity(Gravity.CENTER);
+            page.addView(selHint, new LinearLayout.LayoutParams(-1, -2));
+        }
 
         // Reset Ads ID now
         LinearLayout reset = new LinearLayout(this);

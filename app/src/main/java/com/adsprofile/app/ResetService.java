@@ -15,8 +15,10 @@ import android.view.View;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
 import android.widget.Toast;
 import com.google.android.gms.ads.identifier.AdvertisingIdClient;
+import java.util.ArrayList;
 import java.util.List;
 
 // Opens Google's Ads page and taps "Reset advertising ID" and then "OK". Works only when asked to.
@@ -35,7 +37,7 @@ public class ResetService extends AccessibilityService {
     volatile String before;
     Thread beforeThread;
     final Handler h = new Handler(Looper.getMainLooper());
-    boolean running, finishing, remoteMode;
+    boolean running, finishing, remoteMode, foundReset;
     int stage;
     long deadline;
     WindowManager wm;
@@ -99,6 +101,7 @@ public class ResetService extends AccessibilityService {
         running = true;
         finishing = false;
         remoteMode = remote;
+        foundReset = false;
         stage = 0;
         setBusy(true);
         before = null;
@@ -276,18 +279,43 @@ public class ResetService extends AccessibilityService {
         return null;
     }
 
+    // every window we can see: the active one first, then the others (this helps to reach the work profile's window)
+    List<AccessibilityNodeInfo> candidateRoots() {
+        List<AccessibilityNodeInfo> l = new ArrayList<AccessibilityNodeInfo>();
+        AccessibilityNodeInfo a = getRootInActiveWindow();
+        if (a != null) l.add(a);
+        try {
+            List<AccessibilityWindowInfo> ws = getWindows();
+            if (ws != null) {
+                for (AccessibilityWindowInfo w : ws) {
+                    AccessibilityNodeInfo r = w.getRoot();
+                    if (r != null) l.add(r);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return l;
+    }
+
     void work() {
-        AccessibilityNodeInfo root = getRootInActiveWindow();
-        if (root == null) return;
-        if (getPackageName().equals(String.valueOf(root.getPackageName()))) return;
+        for (AccessibilityNodeInfo root : candidateRoots()) {
+            String pk = String.valueOf(root.getPackageName());
+            if (getPackageName().equals(pk) || "com.android.systemui".equals(pk)) continue;
+            if (handle(root)) return;
+        }
+    }
+
+    // true when something was tapped
+    boolean handle(AccessibilityNodeInfo root) {
         if (stage == 0) {
             List<AccessibilityNodeInfo> l = root.findAccessibilityNodeInfosByText("Reset advertising ID");
-            if (l == null) return;
+            if (l == null) return false;
             for (AccessibilityNodeInfo n : l) {
+                foundReset = true;
                 AccessibilityNodeInfo t = clickable(n);
                 if (t != null && t.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                     stage = 1;
-                    return;
+                    return true;
                 }
             }
         } else {
@@ -296,7 +324,7 @@ public class ResetService extends AccessibilityService {
                 for (AccessibilityNodeInfo n : b) {
                     if (n.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                         done(true);
-                        return;
+                        return true;
                     }
                 }
             }
@@ -306,19 +334,24 @@ public class ResetService extends AccessibilityService {
                     AccessibilityNodeInfo t = clickable(n);
                     if (t != null && t.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                         done(true);
-                        return;
+                        return true;
                     }
                 }
             }
         }
+        return false;
     }
 
     void done(boolean ok) {
         if (finishing) return;
         finishing = true;
         if (!ok) {
-            Toast.makeText(this, S.t(this, "Could not finish. Try again.", "Ba a iya kammalawa ba. Sake gwadawa."),
-                    Toast.LENGTH_LONG).show();
+            String msg = S.t(this, "Could not finish. Try again.", "Ba a iya kammalawa ba. Sake gwadawa.");
+            if (remoteMode && !foundReset) {
+                msg = S.t(this, "The Ads page of the other profile was not seen by the main app.",
+                        "Main app bai ga shafin Ads na \u0257ayan profile ba.");
+            }
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
             hideCurtain();
             setBusy(false);
             running = false;
