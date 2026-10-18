@@ -24,7 +24,7 @@ class Reset {
                 ResetService.request(c, mode);
             } else {
                 // work copy without its own Accessibility: the main copy does the tapping for it
-                if (launchOther(c) && fromFloating) spinFor(5000);
+                if (launchOtherAds(c) && fromFloating) spinFor(5000);
             }
         } else if (!managed) {
             // main copy, work profile selected: this copy's Accessibility does the tapping there
