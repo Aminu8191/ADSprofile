@@ -10,8 +10,8 @@ android {
         applicationId "com.adsprofile.app"
         minSdk 23
         targetSdk 34
-        versionCode 15
-        versionName "2.4.1"
+        versionCode 16
+        versionName "2.4.2"
         // AdMob APP ID. This one is Google's official TEST id. Replace with your real one later.
         manifestPlaceholders = [admobAppId: "ca-app-pub-8567720425475375~1953279217"]
     }

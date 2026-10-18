@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -36,6 +37,14 @@ public class ResetService extends AccessibilityService {
     static volatile Listener listener;   // the floating button listens here to spin
     volatile String before;
     Thread beforeThread;
+
+    // the ID read before a reset (kept per reset, so quick taps one after another do not mix)
+    static class Snap {
+        volatile String before;
+        Thread t;
+    }
+
+    Snap snap;
     final Handler h = new Handler(Looper.getMainLooper());
     boolean running, finishing, remoteMode, foundReset;
     int stage;
@@ -104,15 +113,15 @@ public class ResetService extends AccessibilityService {
         foundReset = false;
         stage = 0;
         setBusy(true);
-        before = null;
-        beforeThread = null;
+        final Snap sn = new Snap();
+        snap = sn;
         if (!remote) {   // the ID of the other profile cannot be read from here
-            beforeThread = new Thread(new Runnable() {
+            sn.t = new Thread(new Runnable() {
                 public void run() {
-                    before = adId();
+                    sn.before = adId();
                 }
             });
-            beforeThread.start();
+            sn.t.start();
         }
         if (mode == MODE_FREEZE && Build.VERSION.SDK_INT >= 30) {
             freezeThenGo();
@@ -130,10 +139,10 @@ public class ResetService extends AccessibilityService {
                 done(false);
                 return;
             }
-            h.postDelayed(step, 900);
+            h.postDelayed(step, 600);
         } else {
             Ads.open(this);
-            h.postDelayed(step, 450);
+            h.postDelayed(step, 250);
         }
     }
 
@@ -197,7 +206,7 @@ public class ResetService extends AccessibilityService {
                 return;
             }
             work();
-            if (running && !finishing) h.postDelayed(this, 150);
+            if (running && !finishing) h.postDelayed(this, 70);
         }
     };
 
@@ -219,9 +228,11 @@ public class ResetService extends AccessibilityService {
             View c;
             if (shot != null) {
                 FloatingService f = FloatingService.inst;
-                boolean showFab = f != null && f.fab != null && f.lp != null;
-                c = new FreezeView(this, shot, showFab ? f.lp.x : 0, showFab ? f.lp.y : 0,
-                        showFab ? f.lp.width : 0, showFab ? f.fab.fill : 0, showFab);
+                boolean showFab = f != null && f.fab != null && f.fab.getWidth() > 0;
+                int[] loc = new int[2];
+                if (showFab) f.fab.getLocationOnScreen(loc);   // where the button really is on the screen
+                c = new FreezeView(this, shot, loc[0], loc[1], showFab ? f.fab.getWidth() : 0,
+                        showFab ? f.fab.fill : 0, showFab);
                 wm.addView(c, lp);   // appears at once: it looks exactly like your screen
             } else {
                 c = new CurtainView(this);
@@ -309,13 +320,26 @@ public class ResetService extends AccessibilityService {
     boolean handle(AccessibilityNodeInfo root) {
         if (stage == 0) {
             List<AccessibilityNodeInfo> l = root.findAccessibilityNodeInfosByText("Reset advertising ID");
-            if (l == null) return false;
-            for (AccessibilityNodeInfo n : l) {
-                foundReset = true;
-                AccessibilityNodeInfo t = clickable(n);
-                if (t != null && t.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                    stage = 1;
-                    return true;
+            if (l != null) {
+                for (AccessibilityNodeInfo n : l) {
+                    foundReset = true;
+                    AccessibilityNodeInfo t = clickable(n);
+                    if (t != null && t.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                        stage = 1;
+                        return true;
+                    }
+                }
+            }
+            // Any other language: on Google's Ads page the first tappable text row is "Reset advertising ID".
+            String pk = String.valueOf(root.getPackageName());
+            if (pk.startsWith("com.google.android.gms") || "com.android.settings".equals(pk)) {
+                AccessibilityNodeInfo row = firstRow(root);
+                if (row != null) {
+                    foundReset = true;
+                    if (row.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                        stage = 1;
+                        return true;
+                    }
                 }
             }
         } else {
@@ -342,6 +366,55 @@ public class ResetService extends AccessibilityService {
         return false;
     }
 
+    // the tappable text row nearest the top of the page (not a switch, not a toolbar button)
+    AccessibilityNodeInfo firstRow(AccessibilityNodeInfo root) {
+        List<AccessibilityNodeInfo> rows = new ArrayList<AccessibilityNodeInfo>();
+        collectRows(root, rows, 0);
+        AccessibilityNodeInfo best = null;
+        int bestTop = Integer.MAX_VALUE;
+        Rect r = new Rect();
+        for (AccessibilityNodeInfo n : rows) {
+            n.getBoundsInScreen(r);
+            if (r.top < bestTop) {
+                bestTop = r.top;
+                best = n;
+            }
+        }
+        return best;
+    }
+
+    void collectRows(AccessibilityNodeInfo n, List<AccessibilityNodeInfo> out, int depth) {
+        if (n == null || depth > 25) return;
+        if (n.isClickable() && n.isVisibleToUser() && !n.isCheckable() && hasText(n, 0) && !hasSwitch(n, 0)) {
+            out.add(n);
+            return;
+        }
+        for (int i = 0; i < n.getChildCount(); i++) {
+            collectRows(n.getChild(i), out, depth + 1);
+        }
+    }
+
+    boolean hasText(AccessibilityNodeInfo n, int d) {
+        if (n == null || d > 6) return false;
+        CharSequence t = n.getText();
+        if (t != null && t.length() > 0) return true;
+        for (int i = 0; i < n.getChildCount(); i++) {
+            if (hasText(n.getChild(i), d + 1)) return true;
+        }
+        return false;
+    }
+
+    boolean hasSwitch(AccessibilityNodeInfo n, int d) {
+        if (n == null || d > 6) return false;
+        if (n.isCheckable()) return true;
+        CharSequence cn = n.getClassName();
+        if (cn != null && cn.toString().contains("Switch")) return true;
+        for (int i = 0; i < n.getChildCount(); i++) {
+            if (hasSwitch(n.getChild(i), d + 1)) return true;
+        }
+        return false;
+    }
+
     void done(boolean ok) {
         if (finishing) return;
         finishing = true;
@@ -358,57 +431,47 @@ public class ResetService extends AccessibilityService {
             finishing = false;
             return;
         }
-        // OK was tapped: ring closes, go back, curtain fades, and the ID is checked
+        // OK was tapped: ring closes, go back at once, the curtain fades, and the ID is checked
         if (curtain instanceof CurtainView) ((CurtainView) curtain).setDone();
         else if (curtain instanceof FreezeView) ((FreezeView) curtain).setDone();
         h.postDelayed(new Runnable() {
             public void run() {
                 performGlobalAction(GLOBAL_ACTION_BACK);
             }
-        }, 250);
+        }, 120);
         h.postDelayed(new Runnable() {
             public void run() {
                 hideCurtain();
+                setBusy(false);
+                running = false;      // ready for the next tap right away
+                finishing = false;
             }
-        }, 700);
-        if (remoteMode) {
-            h.postDelayed(new Runnable() {
-                public void run() {
-                    finishVerify(0);
-                }
-            }, 800);
-        } else {
-            verify();
-        }
+        }, 380);
+        if (!remoteMode) verify();
     }
 
     // 1 = ID changed, 2 = same ID, 0 = could not check
     void verify() {
-        final Thread bt = beforeThread;
+        final Snap sn = snap;
         new Thread(new Runnable() {
             public void run() {
                 try {
-                    if (bt != null) bt.join(1500);
+                    if (sn.t != null) sn.t.join(1500);
                 } catch (InterruptedException ignored) {
                 }
-                String b = before;
+                String b = sn.before;
                 int result = 0;
                 if (b != null) {
                     String a = null;
-                    for (int i = 0; i < 4; i++) {
+                    for (int i = 0; i < 5; i++) {
                         try {
-                            Thread.sleep(i == 0 ? 600 : 450);
+                            Thread.sleep(i == 0 ? 350 : 400);
                         } catch (InterruptedException ignored) {
                         }
                         a = adId();
                         if (a != null && !a.equals(b)) break;
                     }
                     result = a == null ? 0 : (a.equals(b) ? 2 : 1);
-                } else {
-                    try {
-                        Thread.sleep(700);
-                    } catch (InterruptedException ignored) {
-                    }
                 }
                 final int r = result;
                 h.post(new Runnable() {
@@ -424,11 +487,7 @@ public class ResetService extends AccessibilityService {
         String msg;
         if (r == 1) msg = S.t(this, "Reset successful", "An yi reset cikin nasara");
         else if (r == 2) msg = S.t(this, "Ads ID did not change. Try again.", "Ads ID bai canza ba. Sake gwadawa.");
-        else if (remoteMode) msg = S.t(this, "Reset sent to the other profile", "An aika reset zuwa \u0257ayan profile");
         else msg = S.t(this, "Reset done (could not verify)", "An yi reset (ba a iya tabbatarwa ba)");
-        if (!(remoteMode && r == 0)) Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();   // the work copy says "Work profile: Reset successful" itself
-        setBusy(false);
-        running = false;
-        finishing = false;
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
     }
 }
